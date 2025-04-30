@@ -1,5 +1,4 @@
-# HIT137_CAS-DAN03_ASSIGNMENT_3
-GROUP CAS/DAN 03 - HIT137 S1 2025 - ASSIGNMENT 3
+# HIT137 (S1 2025) Assignment 3 – Group CAS/DAN 03
 
 ## Overview
 This repository contains the source code and assets for our HIT137 Assignment 3. This assignment demonstrates our understanding of Object-Oriented Programming (OOP), GUI development using Tkinter, image processing using OpenCV, and 2D game development using Pygame.
