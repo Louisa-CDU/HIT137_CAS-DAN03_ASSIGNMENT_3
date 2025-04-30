@@ -15,7 +15,7 @@ This repository contains the source code and assets for our HIT137 Assignment 3.
 
 
 ## Project Components
-^^ Question 1: Image Processing Desktop Application
+### Question 1: Image Processing Desktop Application
 A Python-based GUI application using **Tkinter** and **OpenCV** that allows users to:
 - Load and display images from their local device
 - Crop images via mouse interaction with real-time visual feedback
@@ -23,7 +23,7 @@ A Python-based GUI application using **Tkinter** and **OpenCV** that allows user
 - Save the modified image
 - *(Optional features implemented as time permitted: keyboard shortcuts, undo/redo, etc.)*
 
-^^ Question 2: 2D Side-Scrolling Game
+### Question 2: 2D Side-Scrolling Game
 A game built with **Pygame** featuring:
 - A playable character that can run, jump, and shoot projectiles
 - Enemies and collectible items across 3 unique levels
