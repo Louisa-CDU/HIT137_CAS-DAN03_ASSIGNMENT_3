@@ -1,6 +1,5 @@
 import tkinter as tk
 from tkinter import filedialog, Scrollbar, Canvas
-
 try:
     import cv2
     from PIL import Image, ImageTk
@@ -9,62 +8,78 @@ except ImportError as e:
     print("You can install them by running: pip install opencv-python pillow")
     raise e
 
-
 class ImageEditorApp:
     def __init__(self, master):
         self.master = master
         self.master.title("Image Editor App")
-        self.master.geometry("800x600")  # Set a decent window size
+        self.master.geometry("800x600")
 
-        # Frame for the buttons
+        # Frame for buttons
         self.button_frame = tk.Frame(master)
         self.button_frame.pack(pady=10)
 
         self.load_button = tk.Button(self.button_frame, text="Load Image", command=self.load_image)
         self.load_button.pack()
 
-        # Frame for the image display
+        # Frame for image
         self.image_frame = tk.Frame(master)
         self.image_frame.pack(fill=tk.BOTH, expand=True)
 
-        # Canvas to display the image
         self.canvas = Canvas(self.image_frame, bg="grey")
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        # Add scrollbar for big images
         self.scroll_y = Scrollbar(self.image_frame, orient="vertical", command=self.canvas.yview)
         self.scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
-
         self.canvas.configure(yscrollcommand=self.scroll_y.set)
 
-        # Store the loaded image
         self.cv_image = None
         self.tk_image = None
+
+        # For cropping
+        self.start_x = None
+        self.start_y = None
+        self.rect = None
+
+        # Bind mouse events
+        self.canvas.bind("<ButtonPress-1>", self.start_crop)
+        self.canvas.bind("<B1-Motion>", self.do_crop)
+        self.canvas.bind("<ButtonRelease-1>", self.end_crop)
 
     def load_image(self):
         file_path = filedialog.askopenfilename(
             filetypes=[("Image Files", "*.jpg *.jpeg *.png *.bmp *.gif")]
         )
         if file_path:
-            # Read the image using OpenCV
             self.cv_image = cv2.imread(file_path)
-            # Convert from BGR to RGB
             cv_image_rgb = cv2.cvtColor(self.cv_image, cv2.COLOR_BGR2RGB)
-            # Convert to PIL Image
             pil_image = Image.fromarray(cv_image_rgb)
-            # Convert to ImageTk
             self.tk_image = ImageTk.PhotoImage(pil_image)
 
-            # Clear previous image
             self.canvas.delete("all")
-
-            # Display the image in the centre
             self.canvas.create_image(0, 0, anchor="nw", image=self.tk_image)
-
-            # Configure the scroll region
             self.canvas.config(scrollregion=self.canvas.bbox(tk.ALL))
 
-# Create the Tkinter window
+    def start_crop(self, event):
+        # Mouse pressed - save start point
+        self.start_x = self.canvas.canvasx(event.x)
+        self.start_y = self.canvas.canvasy(event.y)
+
+        # Create rectangle (if it doesn't exist)
+        if self.rect:
+            self.canvas.delete(self.rect)
+        self.rect = self.canvas.create_rectangle(self.start_x, self.start_y, self.start_x, self.start_y, outline="red")
+
+    def do_crop(self, event):
+        # Mouse is moving with button pressed - update rectangle size
+        cur_x = self.canvas.canvasx(event.x)
+        cur_y = self.canvas.canvasy(event.y)
+        self.canvas.coords(self.rect, self.start_x, self.start_y, cur_x, cur_y)
+
+    def end_crop(self, event):
+        # Mouse released - you could trigger cropping here later
+        pass
+
+# Create window
 if __name__ == "__main__":
     root = tk.Tk()
     app = ImageEditorApp(root)
