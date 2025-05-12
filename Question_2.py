@@ -74,17 +74,23 @@ class Projectile(pygame.sprite.Sprite):
             self.kill()
 
 class EnemyTank(pygame.sprite.Sprite):
-    def __init__(self, x, y):
+    def __init__(self, x, y, health=50):
         super().__init__()
         self.image = pygame.Surface((50, 30))
         self.image.fill((0, 0, 255))
         self.rect = self.image.get_rect()
         self.rect.x = x
         self.rect.y = y
-        self.health = 50
+        self.health = health
 
     def update(self):
         pass
+
+class BossTank(EnemyTank):
+    def __init__(self, x, y):
+        super().__init__(x, y, health=200)
+        self.image = pygame.Surface((100, 60))
+        self.image.fill((255, 0, 255))
 
 class Collectible(pygame.sprite.Sprite):
     def __init__(self, x, y, kind='health'):
@@ -116,8 +122,9 @@ class LevelManager:
                 enemy_group.add(EnemyTank(400 + i * 150, HEIGHT - 80))
             collectible_group.add(Collectible(500, HEIGHT - 70, 'health'))
         elif self.level == 3:
-            for i in range(4):
-                enemy_group.add(EnemyTank(300 + i * 120, HEIGHT - 80))
+            for i in range(2):
+                enemy_group.add(EnemyTank(300 + i * 200, HEIGHT - 80))
+            enemy_group.add(BossTank(600, HEIGHT - 110))
             collectible_group.add(Collectible(550, HEIGHT - 70, 'life'))
 
     def next_level(self):
@@ -178,7 +185,10 @@ def game_loop():
                 bullet.kill()
                 if enemy.health <= 0:
                     enemy.kill()
-                    score_manager.add_points(100)
+                    if isinstance(enemy, BossTank):
+                        score_manager.add_points(500)
+                    else:
+                        score_manager.add_points(100)
 
         pickups = pygame.sprite.spritecollide(tank, collectible_group, True)
         for item in pickups:
