@@ -12,7 +12,7 @@ class ImageEditorApp:
     def __init__(self, master):
         self.master = master
         self.master.title("Image Editor App")
-        self.master.geometry("800x600")
+        self.master.geometry("1200x600")  # Made a bit wider for side-by-side images
 
         # Frame for buttons
         self.button_frame = tk.Frame(master)
@@ -21,19 +21,27 @@ class ImageEditorApp:
         self.load_button = tk.Button(self.button_frame, text="Load Image", command=self.load_image)
         self.load_button.pack()
 
-        # Frame for image
+        # Frame for images
         self.image_frame = tk.Frame(master)
         self.image_frame.pack(fill=tk.BOTH, expand=True)
 
+        # Original Image Canvas
         self.canvas = Canvas(self.image_frame, bg="grey")
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
+        # Cropped Image Label
+        self.cropped_label = tk.Label(self.image_frame, bg="lightgrey", text="Cropped image will appear here")
+        self.cropped_label.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+        # Scrollbar
         self.scroll_y = Scrollbar(self.image_frame, orient="vertical", command=self.canvas.yview)
         self.scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
         self.canvas.configure(yscrollcommand=self.scroll_y.set)
 
         self.cv_image = None
         self.tk_image = None
+        self.cropped_cv_image = None
+        self.cropped_tk_image = None
 
         # For cropping
         self.start_x = None
@@ -60,24 +68,42 @@ class ImageEditorApp:
             self.canvas.config(scrollregion=self.canvas.bbox(tk.ALL))
 
     def start_crop(self, event):
-        # Mouse pressed - save start point
         self.start_x = self.canvas.canvasx(event.x)
         self.start_y = self.canvas.canvasy(event.y)
-
-        # Create rectangle (if it doesn't exist)
         if self.rect:
             self.canvas.delete(self.rect)
         self.rect = self.canvas.create_rectangle(self.start_x, self.start_y, self.start_x, self.start_y, outline="red")
 
     def do_crop(self, event):
-        # Mouse is moving with button pressed - update rectangle size
         cur_x = self.canvas.canvasx(event.x)
         cur_y = self.canvas.canvasy(event.y)
         self.canvas.coords(self.rect, self.start_x, self.start_y, cur_x, cur_y)
 
     def end_crop(self, event):
-        # Mouse released - you could trigger cropping here later
-        pass
+        # Get the ending coordinates
+        end_x = self.canvas.canvasx(event.x)
+        end_y = self.canvas.canvasy(event.y)
+
+        # Calculate the rectangle
+        x1 = int(min(self.start_x, end_x))
+        y1 = int(min(self.start_y, end_y))
+        x2 = int(max(self.start_x, end_x))
+        y2 = int(max(self.start_y, end_y))
+
+        if self.cv_image is not None:
+            # Crop the image using numpy slicing
+            cropped = self.cv_image[y1:y2, x1:x2]
+
+            if cropped.size > 0:
+                self.cropped_cv_image = cropped
+
+                # Convert cropped image to RGB for displaying
+                cropped_rgb = cv2.cvtColor(cropped, cv2.COLOR_BGR2RGB)
+                pil_cropped = Image.fromarray(cropped_rgb)
+                self.cropped_tk_image = ImageTk.PhotoImage(pil_cropped)
+
+                # Display in the cropped label
+                self.cropped_label.config(image=self.cropped_tk_image, text="")
 
 # Create window
 if __name__ == "__main__":
