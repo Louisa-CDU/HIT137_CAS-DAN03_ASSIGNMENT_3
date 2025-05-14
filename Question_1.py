@@ -12,14 +12,17 @@ class ImageEditorApp:
     def __init__(self, master):
         self.master = master
         self.master.title("Image Editor App")
-        self.master.geometry("1200x600")  # Made a bit wider for side-by-side images
+        self.master.geometry("1200x700")  # a bit taller for the slider
 
         # Frame for buttons
         self.button_frame = tk.Frame(master)
         self.button_frame.pack(pady=10)
 
         self.load_button = tk.Button(self.button_frame, text="Load Image", command=self.load_image)
-        self.load_button.pack()
+        self.load_button.pack(side=tk.LEFT, padx=5)
+
+        self.save_button = tk.Button(self.button_frame, text="Save Cropped Image", command=self.save_cropped_image)
+        self.save_button.pack(side=tk.LEFT, padx=5)
 
         # Frame for images
         self.image_frame = tk.Frame(master)
@@ -29,9 +32,17 @@ class ImageEditorApp:
         self.canvas = Canvas(self.image_frame, bg="grey")
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        # Cropped Image Label
-        self.cropped_label = tk.Label(self.image_frame, bg="lightgrey", text="Cropped image will appear here")
-        self.cropped_label.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+        # Cropped Image Section
+        self.cropped_frame = tk.Frame(self.image_frame, bg="lightgrey")
+        self.cropped_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+        self.cropped_label = tk.Label(self.cropped_frame, bg="lightgrey", text="Cropped image will appear here")
+        self.cropped_label.pack(pady=10)
+
+        # Resize Slider
+        self.resize_slider = tk.Scale(self.cropped_frame, from_=10, to=200, orient=tk.HORIZONTAL, label="Resize %", command=self.resize_cropped_image)
+        self.resize_slider.set(100)  # 100% default
+        self.resize_slider.pack(pady=10)
 
         # Scrollbar
         self.scroll_y = Scrollbar(self.image_frame, orient="vertical", command=self.canvas.yview)
@@ -80,30 +91,49 @@ class ImageEditorApp:
         self.canvas.coords(self.rect, self.start_x, self.start_y, cur_x, cur_y)
 
     def end_crop(self, event):
-        # Get the ending coordinates
         end_x = self.canvas.canvasx(event.x)
         end_y = self.canvas.canvasy(event.y)
 
-        # Calculate the rectangle
         x1 = int(min(self.start_x, end_x))
         y1 = int(min(self.start_y, end_y))
         x2 = int(max(self.start_x, end_x))
         y2 = int(max(self.start_y, end_y))
 
         if self.cv_image is not None:
-            # Crop the image using numpy slicing
             cropped = self.cv_image[y1:y2, x1:x2]
 
             if cropped.size > 0:
                 self.cropped_cv_image = cropped
+                self.show_cropped_image()
 
-                # Convert cropped image to RGB for displaying
-                cropped_rgb = cv2.cvtColor(cropped, cv2.COLOR_BGR2RGB)
-                pil_cropped = Image.fromarray(cropped_rgb)
-                self.cropped_tk_image = ImageTk.PhotoImage(pil_cropped)
+    def show_cropped_image(self, scale=100):
+        if self.cropped_cv_image is not None:
+            # Resize cropped image based on scale
+            width = int(self.cropped_cv_image.shape[1] * scale / 100)
+            height = int(self.cropped_cv_image.shape[0] * scale / 100)
+            resized = cv2.resize(self.cropped_cv_image, (width, height))
 
-                # Display in the cropped label
-                self.cropped_label.config(image=self.cropped_tk_image, text="")
+            cropped_rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+            pil_cropped = Image.fromarray(cropped_rgb)
+            self.cropped_tk_image = ImageTk.PhotoImage(pil_cropped)
+
+            self.cropped_label.config(image=self.cropped_tk_image, text="")
+
+    def resize_cropped_image(self, value):
+        self.show_cropped_image(scale=int(value))
+
+    def save_cropped_image(self):
+        if self.cropped_cv_image is not None:
+            file_path = filedialog.asksaveasfilename(defaultextension=".png",
+                                                     filetypes=[("PNG files", "*.png"), ("JPEG files", "*.jpg"), ("All files", "*.*")])
+            if file_path:
+                # Save the *current resized* version
+                scale = int(self.resize_slider.get())
+                width = int(self.cropped_cv_image.shape[1] * scale / 100)
+                height = int(self.cropped_cv_image.shape[0] * scale / 100)
+                resized = cv2.resize(self.cropped_cv_image, (width, height))
+                cv2.imwrite(file_path, resized)
+                print(f"Image saved to {file_path}")
 
 # Create window
 if __name__ == "__main__":
