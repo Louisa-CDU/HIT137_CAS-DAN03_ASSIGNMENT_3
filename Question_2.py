@@ -82,15 +82,20 @@ class EnemyTank(pygame.sprite.Sprite):
         self.rect.x = x
         self.rect.y = y
         self.health = health
+        self.direction = random.choice([-1, 1])
+        self.speed = 2
 
     def update(self):
-        pass
+        self.rect.x += self.direction * self.speed
+        if self.rect.left <= 0 or self.rect.right >= WIDTH:
+            self.direction *= -1
 
 class BossTank(EnemyTank):
     def __init__(self, x, y):
         super().__init__(x, y, health=200)
         self.image = pygame.Surface((100, 60))
         self.image.fill((255, 0, 255))
+        self.speed = 1
 
 class Collectible(pygame.sprite.Sprite):
     def __init__(self, x, y, kind='health'):
