@@ -22,6 +22,10 @@ FPS = 60
 # Font
 font = pygame.font.SysFont('Arial', 24)
 
+# Background
+background = pygame.Surface((1600, HEIGHT))
+background.fill((200, 200, 200))  # Light grey background
+
 # --- Classes ---
 
 class Tank(pygame.sprite.Sprite):
@@ -70,7 +74,7 @@ class Projectile(pygame.sprite.Sprite):
 
     def update(self):
         self.rect.x += self.speed
-        if self.rect.x > WIDTH:
+        if self.rect.x > 1600:
             self.kill()
 
 class EnemyTank(pygame.sprite.Sprite):
@@ -87,7 +91,7 @@ class EnemyTank(pygame.sprite.Sprite):
 
     def update(self):
         self.rect.x += self.direction * self.speed
-        if self.rect.left <= 0 or self.rect.right >= WIDTH:
+        if self.rect.left <= 0 or self.rect.right >= 1600:
             self.direction *= -1
 
 class BossTank(EnemyTank):
@@ -119,18 +123,18 @@ class LevelManager:
         collectible_group.empty()
         if self.level == 1:
             enemy_group.add(EnemyTank(500, HEIGHT - 80))
-            enemy_group.add(EnemyTank(700, HEIGHT - 80))
-            collectible_group.add(Collectible(400, HEIGHT - 70, 'health'))
-            collectible_group.add(Collectible(600, HEIGHT - 70, 'life'))
+            enemy_group.add(EnemyTank(1000, HEIGHT - 80))
+            collectible_group.add(Collectible(700, HEIGHT - 70, 'health'))
+            collectible_group.add(Collectible(1200, HEIGHT - 70, 'life'))
         elif self.level == 2:
             for i in range(3):
-                enemy_group.add(EnemyTank(400 + i * 150, HEIGHT - 80))
-            collectible_group.add(Collectible(500, HEIGHT - 70, 'health'))
+                enemy_group.add(EnemyTank(400 + i * 400, HEIGHT - 80))
+            collectible_group.add(Collectible(1000, HEIGHT - 70, 'health'))
         elif self.level == 3:
             for i in range(2):
-                enemy_group.add(EnemyTank(300 + i * 200, HEIGHT - 80))
-            enemy_group.add(BossTank(600, HEIGHT - 110))
-            collectible_group.add(Collectible(550, HEIGHT - 70, 'life'))
+                enemy_group.add(EnemyTank(500 + i * 500, HEIGHT - 80))
+            enemy_group.add(BossTank(1300, HEIGHT - 110))
+            collectible_group.add(Collectible(1250, HEIGHT - 70, 'life'))
 
     def next_level(self):
         self.level += 1
@@ -165,6 +169,8 @@ level_manager.load_level()
 # --- Main Game Loop ---
 def game_loop():
     run = True
+    scroll_x = 0
+
     while run:
         clock.tick(FPS)
 
@@ -214,11 +220,22 @@ def game_loop():
             if tank.lives <= 0:
                 return 'lost'
 
-        screen.fill(WHITE)
-        player_group.draw(screen)
-        projectile_group.draw(screen)
-        enemy_group.draw(screen)
-        collectible_group.draw(screen)
+        # Scroll the background
+        if tank.rect.x > WIDTH // 2 and scroll_x > -(1600 - WIDTH):
+            tank.rect.x = WIDTH // 2
+            scroll_x -= tank.speed
+        if tank.rect.x < 0 and scroll_x < 0:
+            tank.rect.x = 0
+            scroll_x += tank.speed
+
+        # Draw background
+        screen.blit(background, (scroll_x, 0))
+
+        # Draw and move sprites relative to scroll
+        for group in [collectible_group, enemy_group, projectile_group]:
+            for sprite in group:
+                screen.blit(sprite.image, (sprite.rect.x + scroll_x, sprite.rect.y))
+        screen.blit(tank.image, tank.rect)
 
         pygame.draw.rect(screen, RED, (10, 10, 100, 10))
         pygame.draw.rect(screen, GREEN, (10, 10, tank.health, 10))
