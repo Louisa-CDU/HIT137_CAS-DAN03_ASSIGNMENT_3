@@ -12,7 +12,7 @@ class ImageEditorApp:
     def __init__(self, master):
         self.master = master
         self.master.title("Image Editor App")
-        self.master.geometry("1200x700")  # a bit taller for the slider
+        self.master.geometry("1200x700")  # Taller for the buttons and slider
 
         # Frame for buttons
         self.button_frame = tk.Frame(master)
@@ -23,6 +23,9 @@ class ImageEditorApp:
 
         self.save_button = tk.Button(self.button_frame, text="Save Cropped Image", command=self.save_cropped_image)
         self.save_button.pack(side=tk.LEFT, padx=5)
+
+        self.undo_button = tk.Button(self.button_frame, text="Undo", command=self.undo_crop)
+        self.undo_button.pack(side=tk.LEFT, padx=5)
 
         # Frame for images
         self.image_frame = tk.Frame(master)
@@ -41,7 +44,7 @@ class ImageEditorApp:
 
         # Resize Slider
         self.resize_slider = tk.Scale(self.cropped_frame, from_=10, to=200, orient=tk.HORIZONTAL, label="Resize %", command=self.resize_cropped_image)
-        self.resize_slider.set(100)  # 100% default
+        self.resize_slider.set(100)
         self.resize_slider.pack(pady=10)
 
         # Scrollbar
@@ -54,10 +57,11 @@ class ImageEditorApp:
         self.cropped_cv_image = None
         self.cropped_tk_image = None
 
-        # For cropping
+        # Cropping and Undo History
         self.start_x = None
         self.start_y = None
         self.rect = None
+        self.crop_history = []  # 🧠 New list for storing previous crops
 
         # Bind mouse events
         self.canvas.bind("<ButtonPress-1>", self.start_crop)
@@ -103,12 +107,14 @@ class ImageEditorApp:
             cropped = self.cv_image[y1:y2, x1:x2]
 
             if cropped.size > 0:
+                if self.cropped_cv_image is not None:
+                    # Save current cropped image before overwriting
+                    self.crop_history.append(self.cropped_cv_image.copy())
                 self.cropped_cv_image = cropped
                 self.show_cropped_image()
 
     def show_cropped_image(self, scale=100):
         if self.cropped_cv_image is not None:
-            # Resize cropped image based on scale
             width = int(self.cropped_cv_image.shape[1] * scale / 100)
             height = int(self.cropped_cv_image.shape[0] * scale / 100)
             resized = cv2.resize(self.cropped_cv_image, (width, height))
@@ -127,13 +133,21 @@ class ImageEditorApp:
             file_path = filedialog.asksaveasfilename(defaultextension=".png",
                                                      filetypes=[("PNG files", "*.png"), ("JPEG files", "*.jpg"), ("All files", "*.*")])
             if file_path:
-                # Save the *current resized* version
                 scale = int(self.resize_slider.get())
                 width = int(self.cropped_cv_image.shape[1] * scale / 100)
                 height = int(self.cropped_cv_image.shape[0] * scale / 100)
                 resized = cv2.resize(self.cropped_cv_image, (width, height))
                 cv2.imwrite(file_path, resized)
                 print(f"Image saved to {file_path}")
+
+    def undo_crop(self):
+        if self.crop_history:
+            # Pop the last cropped image and show it
+            self.cropped_cv_image = self.crop_history.pop()
+            self.show_cropped_image()
+        else:
+            # No previous crop - reset
+            self.cropped_label.config(image="", text="No previous crop to undo.")
 
 # Create window
 if __name__ == "__main__":
