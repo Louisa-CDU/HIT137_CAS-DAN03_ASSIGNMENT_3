@@ -53,8 +53,15 @@ pygame.draw.ellipse(background, WHITE, (1100, 130, 180, 90))
 
 # --- Start the Game ---
 result = game_loop()
-game_over_screen(result)
+pygame.mixer.music.fadeout(2000)  # Fade out music over 2 seconds
 
-# --- Start the Game ---
-result = game_loop()
+# Fade to black after game over
+fade_surface = pygame.Surface((WIDTH, HEIGHT))
+fade_surface.fill(BLACK)
+for alpha in range(0, 255, 5):
+    fade_surface.set_alpha(alpha)
+    screen.blit(fade_surface, (0, 0))
+    pygame.display.update()
+    pygame.time.delay(30)
+
 game_over_screen(result)
