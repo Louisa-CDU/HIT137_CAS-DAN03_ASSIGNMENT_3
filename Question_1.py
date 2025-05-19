@@ -12,7 +12,7 @@ class ImageEditorApp:
     def __init__(self, master):
         self.master = master
         self.master.title("Image Editor App")
-        self.master.geometry("1200x700")  # Taller for the buttons and slider
+        self.master.geometry("1200x700")
 
         # Frame for buttons
         self.button_frame = tk.Frame(master)
@@ -21,10 +21,10 @@ class ImageEditorApp:
         self.load_button = tk.Button(self.button_frame, text="Load Image", command=self.load_image)
         self.load_button.pack(side=tk.LEFT, padx=5)
 
-        self.save_button = tk.Button(self.button_frame, text="Save Cropped Image", command=self.save_cropped_image)
+        self.save_button = tk.Button(self.button_frame, text="Save Cropped Image (Ctrl+S)", command=self.save_cropped_image)
         self.save_button.pack(side=tk.LEFT, padx=5)
 
-        self.undo_button = tk.Button(self.button_frame, text="Undo", command=self.undo_crop)
+        self.undo_button = tk.Button(self.button_frame, text="Undo (Ctrl+Z)", command=self.undo_crop)
         self.undo_button.pack(side=tk.LEFT, padx=5)
 
         # Frame for images
@@ -61,12 +61,16 @@ class ImageEditorApp:
         self.start_x = None
         self.start_y = None
         self.rect = None
-        self.crop_history = []  # 🧠 New list for storing previous crops
+        self.crop_history = []
 
         # Bind mouse events
         self.canvas.bind("<ButtonPress-1>", self.start_crop)
         self.canvas.bind("<B1-Motion>", self.do_crop)
         self.canvas.bind("<ButtonRelease-1>", self.end_crop)
+
+        # Bind Keyboard Shortcuts 🧠
+        self.master.bind('<Control-s>', self.save_cropped_image_shortcut)
+        self.master.bind('<Control-z>', self.undo_crop_shortcut)
 
     def load_image(self):
         file_path = filedialog.askopenfilename(
@@ -108,7 +112,6 @@ class ImageEditorApp:
 
             if cropped.size > 0:
                 if self.cropped_cv_image is not None:
-                    # Save current cropped image before overwriting
                     self.crop_history.append(self.cropped_cv_image.copy())
                 self.cropped_cv_image = cropped
                 self.show_cropped_image()
@@ -142,12 +145,17 @@ class ImageEditorApp:
 
     def undo_crop(self):
         if self.crop_history:
-            # Pop the last cropped image and show it
             self.cropped_cv_image = self.crop_history.pop()
             self.show_cropped_image()
         else:
-            # No previous crop - reset
             self.cropped_label.config(image="", text="No previous crop to undo.")
+
+    # Shortcuts handlers
+    def save_cropped_image_shortcut(self, event):
+        self.save_cropped_image()
+
+    def undo_crop_shortcut(self, event):
+        self.undo_crop()
 
 # Create window
 if __name__ == "__main__":
