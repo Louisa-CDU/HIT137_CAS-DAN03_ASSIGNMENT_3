@@ -1,113 +1,143 @@
 import tkinter as tk
 from tkinter import filedialog, Scrollbar, Canvas, messagebox
+from PIL import Image, ImageTk
 import subprocess
 import sys
-
-# Automatically install missing packages
-def install_and_import(package_name, import_name=None):
-    try:
-        if import_name is None:
-            import_name = package_name
-        __import__(import_name)
-    except ImportError:
-        print(f"Package '{package_name}' not found. Installing...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", package_name])
-        print(f"'{package_name}' installed successfully.")
-        __import__(import_name)
-
-# Install necessary packages if not present
-install_and_import("opencv-python", "cv2")
-install_and_import("pillow", "PIL")
-
 import cv2
-from PIL import Image, ImageTk
 
 class CustomCanvas(Canvas):
-    """Subclass of Canvas to demonstrate inheritance."""
     def __init__(self, master, **kwargs):
         super().__init__(master, **kwargs)
 
 class ImageEditorApp:
-    """Main application class handling image editing operations."""
     def __init__(self, master):
         self.master = master
         self.master.title("Image Editor App")
-        self.master.geometry("1200x720")
+        self.master.configure(bg="#D9F2D0")
+        self.master.geometry("1200x820")
 
-        # Button Frame
-        self.button_frame = tk.Frame(master)
-        self.button_frame.pack(pady=10)
+        self.instructions_frame = tk.Frame(master, bg="yellow")
+        self.instructions_frame.pack(fill=tk.X, pady=5, padx=10)
 
-        self.load_button = tk.Button(self.button_frame, text="Load Image", command=self.load_image)
+        self.instructions = tk.Label(self.instructions_frame,
+            text="📌 Load an image. Click and drag to crop. Use the slider to resize. Use Grayscale, Undo, Redo, Restart or Save.",
+            bg="yellow", fg="black", font=("Segoe UI Emoji", 11, "bold"), anchor="w", padx=10)
+        self.instructions.pack(fill=tk.X)
+
+        self.button_frame = tk.Frame(master, bg="#D9F2D0")
+        self.button_frame.pack(pady=5)
+
+        btn_cfg = dict(font=("Arial", 10), bg="#00B050", fg="white", activebackground="#009444", activeforeground="white")
+        self.load_button = tk.Button(self.button_frame, text="Load Image", command=self.load_image, **btn_cfg)
         self.load_button.pack(side=tk.LEFT, padx=5)
 
-        self.save_button = tk.Button(self.button_frame, text="Save Cropped Image (Ctrl+S)", command=self.save_cropped_image)
+        self.save_button = tk.Button(self.button_frame, text="Save (Ctrl+S)", command=self.save_cropped_image, **btn_cfg)
         self.save_button.pack(side=tk.LEFT, padx=5)
 
-        self.undo_button = tk.Button(self.button_frame, text="Undo (Ctrl+Z)", command=self.undo_crop)
+        self.undo_button = tk.Button(self.button_frame, text="Undo (Ctrl+Z)", command=self.undo_crop, **btn_cfg)
         self.undo_button.pack(side=tk.LEFT, padx=5)
 
-        self.toggle_gray_button = tk.Button(self.button_frame, text="Toggle Grayscale", command=self.toggle_grayscale)
-        self.toggle_gray_button.pack(side=tk.LEFT, padx=5)
+        self.redo_button = tk.Button(self.button_frame, text="Redo (Ctrl+Y)", command=self.redo_crop, **btn_cfg)
+        self.redo_button.pack(side=tk.LEFT, padx=5)
 
-        # Image Display Frame
+        self.grayscale_button = tk.Button(self.button_frame, text="Grayscale (Ctrl+G)", command=self.toggle_grayscale, **btn_cfg)
+        self.grayscale_button.pack(side=tk.LEFT, padx=5)
+
+        self.restart_button = tk.Button(self.button_frame, text="Restart (Ctrl+R)", command=self.restart_to_original, **btn_cfg)
+        self.restart_button.pack(side=tk.LEFT, padx=5)
+
+        self.slider_frame = tk.Frame(master, bg="#D9F2D0")
+        self.slider_frame.pack(pady=5)
+
+        self.slider_label = tk.Label(self.slider_frame, text="Resize to %:", font=("Arial", 10), bg="#D9F2D0")
+        self.slider_label.pack(side=tk.LEFT)
+
+        self.resize_slider = tk.Scale(self.slider_frame, from_=10, to=500, orient=tk.HORIZONTAL,
+                                      command=self.apply_resize, bg="#e6e6e6", length=300)
+        self.resize_slider.set(100)
+        self.resize_slider.pack(side=tk.LEFT)
+
         self.image_frame = tk.Frame(master)
         self.image_frame.pack(fill=tk.BOTH, expand=True)
 
-        self.canvas = CustomCanvas(self.image_frame, bg="grey")
+        self.canvas = CustomCanvas(self.image_frame, bg="#d9d9d9")
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        self.cropped_frame = tk.Frame(self.image_frame, bg="lightgrey")
+        self.cropped_frame = tk.Frame(self.image_frame, bg="#f0f0f0")
         self.cropped_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
-        self.cropped_label = tk.Label(self.cropped_frame, bg="lightgrey", text="Cropped image will appear here")
+        self.cropped_label = tk.Label(self.cropped_frame, bg="#f0f0f0", text="Cropped image will appear here", font=("Arial", 10))
         self.cropped_label.pack(pady=10)
-
-        self.resize_slider = tk.Scale(self.cropped_frame, from_=10, to=200, orient=tk.HORIZONTAL,
-                                      label="Resize %", command=self.resize_cropped_image)
-        self.resize_slider.set(100)
-        self.resize_slider.pack(pady=10)
 
         self.scroll_y = Scrollbar(self.image_frame, orient="vertical", command=self.canvas.yview)
         self.scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
         self.canvas.configure(yscrollcommand=self.scroll_y.set)
 
+        self.reset_state()
+
+        self.canvas.bind("<ButtonPress-1>", self.start_crop)
+        self.canvas.bind("<B1-Motion>", self.do_crop)
+        self.canvas.bind("<ButtonRelease-1>", self.end_crop)
+
+        self.master.bind('<Control-s>', self.save_cropped_image)
+        self.master.bind('<Control-z>', self.undo_crop)
+        self.master.bind('<Control-y>', self.redo_crop)
+        self.master.bind('<Control-g>', self.toggle_grayscale)
+        self.master.bind('<Control-r>', self.restart_to_original)
+        self.master.bind('<Control-l>', self.load_image)
+
+    def reset_state(self):
         self.cv_image = None
         self.tk_image = None
+        self.original_image = None
+        self.display_scale = 1.0
         self.cropped_cv_image = None
         self.cropped_tk_image = None
+        self.display_image = None
         self.is_grayscale = False
-
-        # For cropping
         self.start_x = None
         self.start_y = None
         self.rect = None
         self.crop_history = []
+        self.redo_stack = []
+        self.canvas.delete("all")
+        self.cropped_label.config(image="", text="Cropped image will appear here")
+        self.resize_slider.set(100)
 
-        # Event bindings
-        self.canvas.bind("<ButtonPress-1>", self.start_crop)
-        self.canvas.bind("<B1-Motion>", self.do_crop)
-        self.canvas.bind("<ButtonRelease-1>", self.end_crop)
-        self.master.bind('<Control-s>', self.save_cropped_image_shortcut)
-        self.master.bind('<Control-z>', self.undo_crop_shortcut)
+    def load_image(self, event=None):
+        file_path = filedialog.askopenfilename(filetypes=[("Image Files", "*.jpg *.jpeg *.png *.bmp *.gif")])
+        if file_path:
+            self.reset_state()
+            self.cv_image = cv2.imread(file_path)
+            self.original_image = self.cv_image.copy()
+            self.show_full_image(resize=True)
 
-    def load_image(self):
-        """Load an image from file and display it on the canvas."""
-        try:
-            file_path = filedialog.askopenfilename(filetypes=[("Image Files", "*.jpg *.jpeg *.png *.bmp *.gif")])
-            if file_path:
-                self.cv_image = cv2.imread(file_path)
-                self.is_grayscale = False
-                rgb_image = cv2.cvtColor(self.cv_image, cv2.COLOR_BGR2RGB)
-                self.tk_image = ImageTk.PhotoImage(Image.fromarray(rgb_image))
-                self.canvas.delete("all")
-                self.canvas.create_image(0, 0, anchor="nw", image=self.tk_image)
-                self.canvas.config(scrollregion=self.canvas.bbox(tk.ALL))
-        except Exception as e:
-            messagebox.showerror("Load Error", f"Could not load image:\n{e}")
+    def restart_to_original(self, event=None):
+        if self.original_image is not None:
+            self.cv_image = self.original_image.copy()
+            self.cropped_cv_image = None
+            self.crop_history.clear()
+            self.redo_stack.clear()
+            self.resize_slider.set(100)
+            self.is_grayscale = False
+            self.show_full_image(resize=True)
+            self.cropped_label.config(image="", text="Cropped image will appear here")
+
+    def show_full_image(self, resize=True):
+        if self.cv_image is not None:
+            display = self.cv_image.copy()
+            h, w = display.shape[:2]
+            self.display_scale = 1.0
+            if resize and w > 600:
+                self.display_scale = 600 / w
+                display = cv2.resize(display, (int(w * self.display_scale), int(h * self.display_scale)))
+            rgb_image = cv2.cvtColor(display, cv2.COLOR_BGR2RGB)
+            self.tk_image = ImageTk.PhotoImage(Image.fromarray(rgb_image))
+            self.canvas.delete("all")
+            self.canvas.create_image(0, 0, anchor="nw", image=self.tk_image)
+            self.canvas.config(scrollregion=self.canvas.bbox(tk.ALL))
 
     def start_crop(self, event):
-        """Begin a cropping rectangle on mouse press."""
         self.start_x = self.canvas.canvasx(event.x)
         self.start_y = self.canvas.canvasy(event.y)
         if self.rect:
@@ -115,88 +145,86 @@ class ImageEditorApp:
         self.rect = self.canvas.create_rectangle(self.start_x, self.start_y, self.start_x, self.start_y, outline="red")
 
     def do_crop(self, event):
-        """Update the cropping rectangle as the mouse moves."""
         cur_x = self.canvas.canvasx(event.x)
         cur_y = self.canvas.canvasy(event.y)
         self.canvas.coords(self.rect, self.start_x, self.start_y, cur_x, cur_y)
 
     def end_crop(self, event):
-        """Complete the crop and show the cropped image."""
-        try:
-            end_x = self.canvas.canvasx(event.x)
-            end_y = self.canvas.canvasy(event.y)
-            x1, y1 = int(min(self.start_x, end_x)), int(min(self.start_y, end_y))
-            x2, y2 = int(max(self.start_x, end_x)), int(max(self.start_y, end_y))
-
-            if self.cv_image is not None:
-                cropped = self.cv_image[y1:y2, x1:x2]
-                if cropped.size > 0:
-                    if self.cropped_cv_image is not None:
-                        self.crop_history.append(self.cropped_cv_image.copy())
-                    self.cropped_cv_image = cropped
-                    self.show_cropped_image()
-        except Exception as e:
-            messagebox.showerror("Crop Error", f"Could not crop image:\n{e}")
+        end_x = self.canvas.canvasx(event.x)
+        end_y = self.canvas.canvasy(event.y)
+        scale = 1 / self.display_scale if self.display_scale != 0 else 1
+        x1, y1 = int(min(self.start_x, end_x) * scale), int(min(self.start_y, end_y) * scale)
+        x2, y2 = int(max(self.start_x, end_x) * scale), int(max(self.start_y, end_y) * scale)
+        if self.cv_image is not None:
+            cropped = self.cv_image[y1:y2, x1:x2]
+            if cropped.size > 0:
+                self.crop_history.append((self.cropped_cv_image.copy() if self.cropped_cv_image is not None else None,
+                                          self.resize_slider.get(), self.is_grayscale))
+                self.redo_stack.clear()
+                self.cropped_cv_image = cropped
+                self.show_cropped_image()
 
     def resize_image(self, image, scale):
-        """Resize a given image to the specified scale percentage."""
         width = int(image.shape[1] * scale / 100)
         height = int(image.shape[0] * scale / 100)
         return cv2.resize(image, (width, height))
 
-    def show_cropped_image(self, scale=100):
-        """Display the cropped image at a specified scale, applying grayscale if toggled."""
-        if self.cropped_cv_image is not None:
-            resized = self.resize_image(self.cropped_cv_image, scale)
-            if self.is_grayscale:
-                gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
-                display_image = Image.fromarray(gray)
-            else:
-                rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
-                display_image = Image.fromarray(rgb)
-            self.cropped_tk_image = ImageTk.PhotoImage(display_image)
-            self.cropped_label.config(image=self.cropped_tk_image, text="")
+    def show_cropped_image(self, event=None):
+        scale = self.resize_slider.get()
+        img = self.cropped_cv_image if self.cropped_cv_image is not None else self.cv_image
+        if img is None:
+            return
+        resized = self.resize_image(img, scale)
+        image_data = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY) if self.is_grayscale else cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+        self.display_image = Image.fromarray(image_data)
+        self.cropped_tk_image = ImageTk.PhotoImage(self.display_image)
+        self.cropped_label.config(image=self.cropped_tk_image, text="")
 
-    def resize_cropped_image(self, value):
-        """Resize image when slider is adjusted."""
-        self.show_cropped_image(scale=int(value))
+    def apply_resize(self, value=None):
+        self.show_cropped_image()
 
-    def toggle_grayscale(self):
-        """Toggle grayscale preview for the cropped image."""
+    def toggle_grayscale(self, event=None):
         self.is_grayscale = not self.is_grayscale
-        self.show_cropped_image(scale=int(self.resize_slider.get()))
+        self.show_cropped_image()
 
-    def save_cropped_image(self):
-        """Save the cropped image (resized and current mode) to file."""
-        if self.cropped_cv_image is not None:
-            try:
-                file_path = filedialog.asksaveasfilename(defaultextension=".png",
-                                                         filetypes=[("PNG files", "*.png"), ("JPEG files", "*.jpg")])
-                if file_path:
-                    scale = int(self.resize_slider.get())
-                    resized = self.resize_image(self.cropped_cv_image, scale)
-                    if self.is_grayscale:
-                        resized = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
-                    cv2.imwrite(file_path, resized)
-                    print(f"Image saved to {file_path}")
-            except Exception as e:
-                messagebox.showerror("Save Error", f"Could not save image:\n{e}")
+    def save_cropped_image(self, event=None):
+        scale = self.resize_slider.get()
+        img = self.cropped_cv_image if self.cropped_cv_image is not None else self.cv_image
+        if img is None:
+            return
+        file_path = filedialog.asksaveasfilename(defaultextension=".png",
+                                                 filetypes=[("PNG files", "*.png"), ("JPEG files", "*.jpg")])
+        if file_path:
+            resized = self.resize_image(img, scale)
+            if self.is_grayscale:
+                resized = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
+            cv2.imwrite(file_path, resized)
+            print(f"Image saved to {file_path}")
 
-    def undo_crop(self):
-        """Revert to the previous cropped image, if available."""
+    def undo_crop(self, event=None):
         if self.crop_history:
-            self.cropped_cv_image = self.crop_history.pop()
+            current_state = (self.cropped_cv_image.copy() if self.cropped_cv_image is not None else None,
+                             self.resize_slider.get(), self.is_grayscale)
+            self.redo_stack.append(current_state)
+            prev_img, prev_scale, prev_gray = self.crop_history.pop()
+            self.cropped_cv_image = prev_img
+            self.resize_slider.set(prev_scale)
+            self.is_grayscale = prev_gray
             self.show_cropped_image()
         else:
             self.cropped_label.config(image="", text="No previous crop to undo.")
+            self.cropped_cv_image = None
 
-    def save_cropped_image_shortcut(self, event):
-        """Keyboard shortcut for saving cropped image."""
-        self.save_cropped_image()
-
-    def undo_crop_shortcut(self, event):
-        """Keyboard shortcut for undoing the crop."""
-        self.undo_crop()
+    def redo_crop(self, event=None):
+        if self.redo_stack:
+            current_state = (self.cropped_cv_image.copy() if self.cropped_cv_image is not None else None,
+                             self.resize_slider.get(), self.is_grayscale)
+            self.crop_history.append(current_state)
+            redo_img, redo_scale, redo_gray = self.redo_stack.pop()
+            self.cropped_cv_image = redo_img
+            self.resize_slider.set(redo_scale)
+            self.is_grayscale = redo_gray
+            self.show_cropped_image()
 
 if __name__ == "__main__":
     root = tk.Tk()
