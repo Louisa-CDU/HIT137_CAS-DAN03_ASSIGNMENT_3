@@ -1,7 +1,9 @@
+import tkinter as tk
+from tkinter import filedialog, Scrollbar, Canvas, messagebox
 import subprocess
 import sys
 
-# Try importing and install if missing
+# Automatically install missing packages
 def install_and_import(package_name, import_name=None):
     try:
         if import_name is None:
@@ -10,12 +12,13 @@ def install_and_import(package_name, import_name=None):
     except ImportError:
         print(f"Package '{package_name}' not found. Installing...")
         subprocess.check_call([sys.executable, "-m", "pip", "install", package_name])
-        print(f"'{package_name}' installed. Restarting script...")
+        print(f"'{package_name}' installed successfully.")
         __import__(import_name)
 
-# Attempt to import/install required packages
+# Install necessary packages if not present
 install_and_import("opencv-python", "cv2")
 install_and_import("pillow", "PIL")
+
 import cv2
 from PIL import Image, ImageTk
 
