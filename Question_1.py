@@ -1,12 +1,23 @@
-import tkinter as tk
-from tkinter import filedialog, Scrollbar, Canvas, messagebox
-try:
-    import cv2
-    from PIL import Image, ImageTk
-except ImportError as e:
-    print("Required packages not found. Please install opencv-python and pillow.")
-    print("You can install them by running: pip install opencv-python pillow")
-    raise e
+import subprocess
+import sys
+
+# Try importing and install if missing
+def install_and_import(package_name, import_name=None):
+    try:
+        if import_name is None:
+            import_name = package_name
+        __import__(import_name)
+    except ImportError:
+        print(f"Package '{package_name}' not found. Installing...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", package_name])
+        print(f"'{package_name}' installed. Restarting script...")
+        __import__(import_name)
+
+# Attempt to import/install required packages
+install_and_import("opencv-python", "cv2")
+install_and_import("pillow", "PIL")
+import cv2
+from PIL import Image, ImageTk
 
 class CustomCanvas(Canvas):
     """Subclass of Canvas to demonstrate inheritance."""
