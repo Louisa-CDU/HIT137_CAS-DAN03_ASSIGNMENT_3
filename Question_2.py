@@ -11,37 +11,23 @@ for module in required_modules:
 
 import pygame
 import random
-import os
+import math
 
 # Initialize Pygame
 pygame.init()
 WIDTH, HEIGHT = 800, 600
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Tank Battle")
+background_img = pygame.image.load("Background.png").convert()
+background_img = pygame.transform.scale(background_img, (WIDTH, HEIGHT))
+background_x = 0
 clock = pygame.time.Clock()
 font = pygame.font.SysFont(None, 36)
 
-# Load Background
-background_img = pygame.image.load("Background.png").convert()
-background_img = pygame.transform.scale(background_img, (2400, HEIGHT))
-
-# Load Sprites with .convert_alpha()
-player_img = pygame.transform.scale(pygame.image.load("User.png").convert_alpha(), (80, 80))
-enemy_imgs = [
-    pygame.transform.scale(pygame.image.load("Enemy 1.png").convert_alpha(), (70, 70)),
-    pygame.transform.scale(pygame.image.load("Enemy 2.png").convert_alpha(), (70, 70))
-]
-mini_boss_img = pygame.transform.scale(pygame.image.load("Mini Boss.png").convert_alpha(), (100, 100))
-boss_img = pygame.transform.scale(pygame.image.load("Boss Tank.png").convert_alpha(), (130, 130))
-health_pack_img = pygame.transform.scale(pygame.image.load("Health Pack.png").convert_alpha(), (40, 40))
-
-# Placeholder heart icon
-heart_img = pygame.Surface((30, 30), pygame.SRCALPHA)
-pygame.draw.polygon(heart_img, (255, 0, 0), [(15, 5), (25, 5), (30, 15), (15, 30), (0, 15), (5, 5)])
-
-# Load Sounds
-shoot_sound = pygame.mixer.Sound("tank-fire.wav")
+# Load sounds
 hit_sound = pygame.mixer.Sound("hit.wav")
+jump_sound = pygame.mixer.Sound("jump.wav")
+shoot_sound = pygame.mixer.Sound("tank-fire.wav")
 pickup_sound = pygame.mixer.Sound("item-pickup.wav")
 
 try:
@@ -53,257 +39,243 @@ except pygame.error:
 
 # Colors
 WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
+RED = (255, 0, 0)
+YELLOW = (255, 255, 0)
+GREEN = (0, 255, 0)
 
-# Game Variables
-scroll_x = 0
-WORLD_WIDTH = 2400
-victory_round = 5
+GRAVITY = 1
 
-score = 0
-round_num = 1
-total_kills = 0
-kills_this_round = 0
-volume_on = True
-mini_boss_spawned = False
-boss_spawned = False
+# Load enemy images
+enemy_images = [
+    pygame.transform.scale(pygame.image.load("Enemy_1.png").convert_alpha(), (80, 80)),
+    pygame.transform.scale(pygame.image.load("Enemy_2.png").convert_alpha(), (80, 80))
+]
+mini_boss_image = pygame.transform.scale(pygame.image.load("Mini_Boss.png").convert_alpha(), (150, 150))
+mega_boss_image = pygame.transform.scale(pygame.image.load("Mega_Boss.png").convert_alpha(), (180, 180))
 
-power_ups = pygame.sprite.Group()
-power_effects = {"speed": 0, "shield": 0, "damage": 0}
-
-# Classes
 class Player(pygame.sprite.Sprite):
     def __init__(self):
         super().__init__()
-        self.image = player_img
+        self.base_image = pygame.image.load("User.png").convert_alpha()
+        self.base_image = pygame.transform.scale(self.base_image, (100, 100))
+        self.image = self.base_image
         self.rect = self.image.get_rect(midbottom=(100, HEIGHT - 50))
-        self.speed = 5
+        self.vel_y = 0
         self.health = 100
         self.lives = 3
-        self.direction = 1
+        self.score = 0
+        self.coins = 0
+        self.on_ground = False
 
     def update(self, keys):
-        global scroll_x
+        dx = 0
+        speed = 2.5
+        if keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]:
+            speed = 4
         if keys[pygame.K_LEFT]:
-            self.rect.x -= self.speed
-            self.direction = -1
+            dx = -speed
         if keys[pygame.K_RIGHT]:
-            self.rect.x += self.speed
-            self.direction = 1
-        if self.rect.x > WIDTH // 2 and scroll_x > -(WORLD_WIDTH - WIDTH):
-            self.rect.x = WIDTH // 2
-            scroll_x -= self.speed
-        self.rect.x = max(0, min(WIDTH - self.rect.width, self.rect.x))
+            dx = speed
+
+        self.vel_y += GRAVITY
+        self.rect.y += self.vel_y
+        if self.rect.bottom >= HEIGHT:
+            self.rect.bottom = HEIGHT
+            self.vel_y = 0
+            self.on_ground = True
+        else:
+            self.on_ground = False
+
+        if keys[pygame.K_SPACE] and self.on_ground:
+            self.vel_y = -20
+            jump_sound.play()
+
+        self.rect.x += dx
 
     def shoot(self):
-        x = self.rect.centerx + (self.direction * 40)
-        y = self.rect.centery
-        bullet = Bullet(x - scroll_x, y, self.direction)
         shoot_sound.play()
-        return bullet
+        y = self.rect.top + self.rect.height // 2.5
+        return Bullet(self.rect.centerx + 30, int(y))
 
 class Bullet(pygame.sprite.Sprite):
-    def __init__(self, x, y, direction):
+    def __init__(self, x, y):
         super().__init__()
-        self.image = pygame.Surface((10, 4))
-        self.image.fill((255, 0, 0))
+        self.image = pygame.Surface((10, 5))
+        self.image.fill(RED)
         self.rect = self.image.get_rect(center=(x, y))
-        self.speed = 10 * direction
+        self.speed = 5
 
     def update(self):
         self.rect.x += self.speed
-        if self.rect.right < 0 or self.rect.left > WORLD_WIDTH:
+        if self.rect.left > WIDTH:
             self.kill()
 
 class Enemy(pygame.sprite.Sprite):
-    def __init__(self, image, x, y, health=50, kind="regular"):
+    def __init__(self, x, y, airborne=False, image=None, health=50):
         super().__init__()
-        self.image = image
-        self.rect = self.image.get_rect(midbottom=(x, y))
+        self.image = image or random.choice(enemy_images)
+        self.rect = self.image.get_rect(topleft=(x, y))
         self.health = health
-        self.kind = kind
+        self.airborne = airborne
+        self.base_y = y
+        self.timer = 0
 
     def update(self):
-        pass
+        self.rect.x -= enemy_speed
+        if self.airborne:
+            self.timer += 1
+            self.rect.y = self.base_y + int(10 * math.sin(self.timer * 0.1))
+        if self.rect.right < 0:
+            self.kill()
 
 class Collectible(pygame.sprite.Sprite):
-    def __init__(self, x, y):
-        super().__init__()
-        self.image = health_pack_img
-        self.rect = self.image.get_rect(center=(x, y))
-
-class PowerUp(pygame.sprite.Sprite):
     def __init__(self, x, y, kind):
         super().__init__()
-        self.kind = kind
-        self.image = pygame.Surface((30, 30))
-        color = {"speed": (0,255,255), "shield": (255,255,0), "damage": (255,0,255)}[kind]
-        self.image.fill(color)
+        self.image = pygame.image.load("Health_Pack.png").convert_alpha()
+        self.image = pygame.transform.scale(self.image, (60, 60))
         self.rect = self.image.get_rect(center=(x, y))
+        self.kind = kind
+        self.timer = 0
+        self.base_y = y
 
-# Groups
+    def update(self):
+        self.rect.x -= collectible_speed
+        if self.kind == 'coin':
+            self.timer += 1
+            self.rect.y = self.base_y + int(5 * math.sin(self.timer * 0.2))
+        if self.rect.right < 0:
+            self.kill()
+
+# Game setup
 player = Player()
 player_group = pygame.sprite.Group(player)
 bullets = pygame.sprite.Group()
 enemies = pygame.sprite.Group()
 collectibles = pygame.sprite.Group()
+missiles = pygame.sprite.Group()
 
-# Spawn Functions
-def spawn_enemies(round_num):
-    global kills_this_round, mini_boss_spawned, boss_spawned
-    kills_this_round = 0
-    mini_boss_spawned = False
-    boss_spawned = False
-    enemies.empty()
-    bullets.empty()
-    collectibles.empty()
-    base_x = WIDTH + 200
-    for i in range(5 + round_num):
-        x = base_x + i * 150
-        enemy = Enemy(enemy_imgs[i % 2], x, HEIGHT - 50, 50, "regular")
-        enemies.add(enemy)
+scroll_speed = 1
+enemy_speed = 1
+collectible_speed = 1
 
-def spawn_mini_boss():
-    mini = Enemy(mini_boss_img, WIDTH * 2, HEIGHT - 50, 120, "mini_boss")
-    enemies.add(mini)
+start_time = pygame.time.get_ticks()
+level = 1
+level_message_time = 0
+level_message_duration = 3000
+mega_boss_spawned = False
+next_enemy_spawn_time = 0
+next_health_spawn_time = 0
 
-def spawn_boss():
-    boss = Enemy(boss_img, WIDTH * 2 + 200, HEIGHT - 50, 200, "boss")
-    enemies.add(boss)
+running = True
+while running:
+    screen.blit(background_img, (background_x, 0))
+    screen.blit(background_img, (background_x + background_img.get_width(), 0))
+    background_x -= scroll_speed
+    if background_x <= -background_img.get_width():
+        background_x = 0
 
-def show_start_screen():
-    screen.fill(BLACK)
-    lines = [
-        "Tank Battle Game",
-        "Use LEFT and RIGHT arrows to move",
-        "Press SPACE to shoot",
-        "Press M to mute/unmute music",
-        "Press P to pause the game",
-        "Press ENTER to start"
-    ]
-    for i, line in enumerate(lines):
-        txt = font.render(line, True, WHITE)
-        screen.blit(txt, (WIDTH//2 - txt.get_width()//2, 100 + i * 40))
-    pygame.display.flip()
-    while True:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT: pygame.quit(); exit()
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN: return
+    keys = pygame.key.get_pressed()
 
-def pause_menu():
-    screen.blit(font.render("Paused - Press R to Resume or Q to Quit", True, WHITE), (WIDTH//2 - 200, HEIGHT//2))
-    pygame.display.flip()
-    while True:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT: pygame.quit(); exit()
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_r: return
-                if event.key == pygame.K_q: pygame.quit(); exit()
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_z:
+            bullets.add(player.shoot())
 
-# Main Game Loop
-def main():
-    global score, round_num, total_kills, kills_this_round, volume_on, mini_boss_spawned, boss_spawned, scroll_x
-    show_start_screen()
-    running = True
-    spawn_enemies(round_num)
+    elapsed_time = pygame.time.get_ticks() - start_time
+    if elapsed_time > 10000 * level:
+        level += 1
+        level_message_time = pygame.time.get_ticks()
+        scroll_speed += 1
+        enemy_speed += 1
+        collectible_speed += 1
 
-    while running:
-        clock.tick(60)
-        screen.blit(background_img, (scroll_x, 0), area=pygame.Rect(-scroll_x, 0, WIDTH, HEIGHT))
-        keys = pygame.key.get_pressed()
+    # Spawn a single enemy at a time
+    if pygame.time.get_ticks() > next_enemy_spawn_time and len(enemies) < 1:
+        y_pos = HEIGHT - 80
+        enemies.add(Enemy(WIDTH, y_pos))
+        next_enemy_spawn_time = pygame.time.get_ticks() + 4000  # 1 every 4 seconds
 
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT: running = False
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_SPACE: bullets.add(player.shoot())
-                if event.key == pygame.K_m:
-                    volume_on = not volume_on
-                    pygame.mixer.music.set_volume(0.5 if volume_on else 0.0)
-                if event.key == pygame.K_p: pause_menu()
+    # Spawn Mini Boss
+    if elapsed_time >= 29900 and not any(e.health > 100 for e in enemies) and not mega_boss_spawned:
+        mini_boss = Enemy(WIDTH, HEIGHT - 150, image=mini_boss_image, health=200)
+        mini_boss.rect = mini_boss.image.get_rect(midbottom=(WIDTH, HEIGHT))
+        enemies.add(mini_boss)
 
-        player.update(keys)
-        bullets.update(); enemies.update(); collectibles.update(); power_ups.update()
+    # Spawn Mega Boss at every 3rd level if Mini Boss defeated
+    if level % 3 == 0 and not any(e.health > 100 for e in enemies) and not mega_boss_spawned:
+        mega_boss = Enemy(WIDTH + 100, HEIGHT - 180, image=mega_boss_image, health=300)
+        mega_boss.rect = mega_boss.image.get_rect(midbottom=(WIDTH + 100, HEIGHT))
+        enemies.add(mega_boss)
+        mega_boss_spawned = True
 
-        for group in [player_group, bullets, enemies, collectibles, power_ups]:
-            for sprite in group:
-                screen.blit(sprite.image, sprite.rect.move(scroll_x, 0))
+    if mega_boss_spawned and not any(e.health > 100 for e in enemies):
+        mega_boss_spawned = False
 
-        screen.blit(font.render(f"Score: {score}", True, WHITE), (10, 10))
-        screen.blit(font.render(f"Round: {round_num}", True, WHITE), (10, 40))
-        for i in range(player.lives): screen.blit(heart_img, (WIDTH - 35 * (i+1), 10))
-        pygame.draw.rect(screen, (255, 0, 0), (10, 70, 100, 10))
-        pygame.draw.rect(screen, (0, 255, 0), (10, 70, player.health, 10))
+    # Health pack frequency reduced
+    if pygame.time.get_ticks() > next_health_spawn_time:
+        if random.random() < 0.5:
+            kind = random.choice(['health', 'life'])
+            y_pos = random.choice([HEIGHT - 60, HEIGHT - 150])
+            collectibles.add(Collectible(WIDTH, y_pos, kind))
+        next_health_spawn_time = pygame.time.get_ticks() + 24000
 
-        for bullet in bullets:
-            hits = pygame.sprite.spritecollide(bullet, enemies, False)
-            for enemy in hits:
-                dmg = 50 if power_effects["damage"] > 0 else 25
-                enemy.health -= dmg
-                bullet.kill(); hit_sound.play()
-                if enemy.health <= 0:
-                    enemies.remove(enemy)
-                    score += 100; kills_this_round += 1
+    # Coins appear regularly
+    if pygame.time.get_ticks() % 1800 < 20:
+        collectibles.add(Collectible(WIDTH, HEIGHT - 60, 'coin'))
 
-        for key in power_effects:
-            if power_effects[key] > 0: power_effects[key] -= 1
-        player.speed = 8 if power_effects["speed"] > 0 else 5
+    # Update groups
+    bullets.update()
+    player.update(keys)
+    enemies.update()
+    collectibles.update()
 
-        if random.randint(0, 300) == 1:
-            collectibles.add(Collectible(player.rect.x - scroll_x + random.randint(200, 600), HEIGHT - 60))
-        if random.randint(0, 400) == 1:
-            kind = random.choice(["speed", "damage", "shield"])
-            power_ups.add(PowerUp(player.rect.x - scroll_x + random.randint(150, 500), HEIGHT - 80, kind))
+    # Bullet collision with enemies
+    for bullet in bullets:
+        hits = pygame.sprite.spritecollide(bullet, enemies, False)
+        for enemy in hits:
+            enemy.health -= 25
+            bullet.kill()
+            if enemy.health <= 0:
+                enemy.kill()
+                player.score += 10
 
-        for p in pygame.sprite.spritecollide(player, power_ups, True): power_effects[p.kind] = 300
-        for c in pygame.sprite.spritecollide(player, collectibles, True):
-            player.health = min(100, player.health + 30); pickup_sound.play()
-
-        for e in enemies:
-            if e.kind in ["mini_boss", "boss"]:
-                max_hp = 200 if e.kind == "boss" else 120
-                pygame.draw.rect(screen, (255,0,0), (e.rect.x + scroll_x, e.rect.y - 10, 100, 5))
-                pygame.draw.rect(screen, (0,255,0), (e.rect.x + scroll_x, e.rect.y - 10, 100 * (e.health / max_hp), 5))
-
-        if not any(e.kind == "regular" for e in enemies) and not mini_boss_spawned:
-            spawn_mini_boss(); mini_boss_spawned = True
-        if mini_boss_spawned and not any(e.kind == "mini_boss" for e in enemies) and not boss_spawned:
-            spawn_boss(); boss_spawned = True
-
-        if not enemies:
-            round_num += 1
-            scroll_x = 0; player.rect.x = 100
-            if round_num > victory_round:
-                screen.fill(BLACK)
-                screen.blit(font.render("VICTORY! Press R to Restart", True, WHITE), (WIDTH//2 - 160, HEIGHT//2))
-                pygame.display.flip()
-                while True:
-                    for event in pygame.event.get():
-                        if event.type == pygame.QUIT: pygame.quit(); exit()
-                        if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
-                            round_num = 1; score = 0; player.health = 100
-                            player.lives = 3; scroll_x = 0; player.rect.x = 100
-                            spawn_enemies(round_num)
-                            break
-            else:
-                spawn_enemies(round_num)
-
+    # Player collision with enemies
+    if pygame.sprite.spritecollide(player, enemies, False):
+        hit_sound.play()
+        player.health -= 1
         if player.health <= 0:
-            player.lives -= 1; player.health = 100
-            if player.lives == 0:
-                screen.blit(font.render("GAME OVER - Press R to Restart", True, WHITE), (WIDTH//2 - 160, HEIGHT//2))
-                pygame.display.flip()
-                while True:
-                    for event in pygame.event.get():
-                        if event.type == pygame.QUIT: pygame.quit(); exit()
-                        if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
-                            round_num = 1; score = 0; player.health = 100
-                            player.lives = 3; scroll_x = 0; player.rect.x = 100
-                            spawn_enemies(round_num)
-                            break
+            player.lives -= 1
+            player.health = 100
 
-        pygame.display.flip()
+    # Player collision with collectibles
+    for item in pygame.sprite.spritecollide(player, collectibles, True):
+        if item.kind == 'health':
+            player.health = min(player.health + 30, 100)
+        elif item.kind == 'life':
+            player.lives += 1
+        elif item.kind == 'coin':
+            player.score += 5
+            player.coins += 1
 
-    pygame.quit()
+    # Draw everything
+    player_group.draw(screen)
+    bullets.draw(screen)
+    enemies.draw(screen)
+    collectibles.draw(screen)
 
-if __name__ == "__main__":
-    main()
+    screen.blit(font.render(f"Score: {player.score}", True, WHITE), (10, 10))
+    screen.blit(font.render(f"Coins: {player.coins}", True, WHITE), (10, 40))
+    screen.blit(font.render(f"Health: {player.health}", True, WHITE), (10, 70))
+    screen.blit(font.render(f"Lives: {player.lives}", True, WHITE), (10, 100))
+    screen.blit(font.render(f"Level: {level}", True, WHITE), (10, 130))
+
+    if 0 < pygame.time.get_ticks() - level_message_time < level_message_duration:
+        msg = font.render(f"Level {level}", True, YELLOW)
+        rect = msg.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 100))
+        screen.blit(msg, rect)
+
+    pygame.display.flip()
+    clock.tick(60)
+
+pygame.quit()
